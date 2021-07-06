@@ -16,7 +16,7 @@ var world = []byte("world")
 var (
 	keyPrefix       = "hello"
 	valuePrefix     = "world"
-	num             = 20
+	num             = 2000
 	testData        = make(map[string]string,0)
 	db              *bolt.DB
 	redisHost       = "redis://localhost:6379"
@@ -52,7 +52,7 @@ func prepareData() {
 	log.Printf("test data count %d",len(testData))
 }
 
-func testRedisPerf() error {
+func redisBatchWrite() error {
 	//set data
 	for key,val := range testData {
 		//set
@@ -62,6 +62,10 @@ func testRedisPerf() error {
 		}
 	}
 	log.Printf("redis save data end")
+	return nil
+}
+
+func redisBatchRead() error {
 	// get data
 	for key,val := range testData {
 		v, err := redisClient.Get(context.TODO(), key).Bytes()
@@ -73,12 +77,13 @@ func testRedisPerf() error {
 		if string(v) != val {
 			return fmt.Errorf("val not match,%s ,%s",string(v),val)
 		}
-		log.Printf("val %s",string(v))
+		//log.Printf("val %s",string(v))
 	}
 
 	return nil
 }
-func testBoltdbPerf() error {
+
+func boltdbBatchWrite() error {
 	// store some data
 	for key, value:= range testData {
 		err := db.Update(func(tx *bolt.Tx) error {
@@ -101,7 +106,10 @@ func testBoltdbPerf() error {
 		}
 	}
 	log.Printf("store data end")
+	return nil
+}
 
+func boltdbBatchRead() error {
 	// retrieve the data
 	for key, value := range testData {
 		err := db.View(func(tx *bolt.Tx) error {
@@ -115,7 +123,7 @@ func testBoltdbPerf() error {
 				fmt.Printf("get wrong val,val %s,value %s",string(val),value)
 				return fmt.Errorf("get wrong val")
 			}
-			fmt.Println(string(val))
+			//fmt.Println(string(val))
 
 			return nil
 		})
@@ -129,8 +137,8 @@ func testBoltdbPerf() error {
 }
 
 func main() {
-	if len(os.Args) !=2 {
-		fmt.Println("Usage: %s {bolt|redis}",os.Args[0])
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: %s {bolt|redis} {r|w|rw}",os.Args[0])
 		return
 	}
 
@@ -151,6 +159,8 @@ func main() {
 		}
 	}
 
+	mode := os.Args[2]
+
 	start := time.Now()
 	defer func() {
 		tc := time.Since(start)
@@ -160,10 +170,24 @@ func main() {
 	//start test
 	if action == "bolt" {
 		log.Println("start bolt perf test")
-		testBoltdbPerf()
+		if mode == "r" {
+			boltdbBatchRead()
+		} else if mode == "w" {
+			boltdbBatchWrite()
+		} else if mode == "rw" {
+			boltdbBatchWrite()
+			boltdbBatchRead()
+		}
 	} else if action == "redis" {
 		log.Println("start redis perf test")
-		testRedisPerf()
+		if mode == "r" {
+			redisBatchRead()
+		} else if mode == "w" {
+			redisBatchWrite()
+		} else if mode == "rw" {
+			redisBatchWrite()
+			redisBatchRead()
+		}
 	}
 
 	log.Println("end")
